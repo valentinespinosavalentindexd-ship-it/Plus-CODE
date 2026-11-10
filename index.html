@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plus Code — prueba de cubos</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; background: #101820; color: #f3f6f8; }
+    #scene { position: fixed; inset: 0; }
+    .panel {
+      position: fixed; z-index: 1; top: 16px; left: 16px; width: min(360px, calc(100vw - 32px));
+      padding: 16px; border: 1px solid #ffffff24; border-radius: 12px;
+      background: #111a22eF; box-shadow: 0 8px 30px #0006;
+    }
+    h1 { margin: 0 0 6px; font-size: 1.15rem; }
+    p { margin: 6px 0 12px; color: #c5d0d8; font-size: .88rem; line-height: 1.4; }
+    .stats { display: flex; gap: 20px; margin: 12px 0; }
+    .stat strong { display: block; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+    .stat span { color: #aab8c2; font-size: .78rem; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { border: 0; border-radius: 7px; padding: 9px 12px; background: #55c2a3; color: #07140f; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #334653; color: #f3f6f8; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    #message { min-height: 1.2em; margin-bottom: 0; color: #93e8d0; }
+    .hint { position: fixed; right: 12px; bottom: 10px; color: #dce5eb; font-size: .8rem; text-shadow: 0 1px 3px #000; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="scene" aria-label="Vista 3D del mundo de cubos"></div>
+  <section class="panel">
+    <h1>Plus Code — prueba visual</h1>
+    <p>Prototipo inicial: coloca hasta 100 cubos y observa los FPS en este navegador. Esto todavía no mide el rendimiento de un lenguaje Plus Code.</p>
+    <div class="stats">
+      <div class="stat"><strong id="cube-count">0</strong><span>cubos</span></div>
+      <div class="stat"><strong id="fps">—</strong><span>FPS actuales</span></div>
+      <div class="stat"><strong id="average-fps">—</strong><span>promedio (5 s)</span></div>
+    </div>
+    <div class="buttons">
+      <button id="add-one">Poner un cubo</button>
+      <button id="add-100" class="secondary">Poner 100</button>
+      <button id="reset" class="secondary">Reiniciar</button>
+    </div>
+    <p id="message" role="status">Arrastra para girar; usa la rueda para acercar.</p>
+  </section>
+  <div class="hint">Los resultados dependen del equipo, navegador y resolución.</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const MAX_CUBES = 100;
+    const host = document.querySelector('#scene');
+    const countLabel = document.querySelector('#cube-count');
+    const fpsLabel = document.querySelector('#fps');
+    const averageLabel = document.querySelector('#average-fps');
+    const message = document.querySelector('#message');
+    const addOneButton = document.querySelector('#add-one');
+    const addAllButton = document.querySelector('#add-100');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#a9c8d8');
+    scene.fog = new THREE.Fog('#a9c8d8', 24, 55);
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(13, 12, 16);
+
+    // Desactivar antialiasing y limitar el pixel ratio ayuda a que la prueba sea
+    // razonable en equipos modestos; no implica que el resultado sea universal.
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    host.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(4.5, 0, 4.5);
+    controls.enableDamping = true;
+    controls.update();
+
+    scene.add(new THREE.HemisphereLight(0xe4f5ff, 0x586348, 2));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    sun.position.set(8, 15, 6);
+    scene.add(sun);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(30, 30),
+      new THREE.MeshLambertMaterial({ color: '#536c46' })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.03;
+    scene.add(ground);
+    const grid = new THREE.GridHelper(20, 20, '#526573', '#71808a');
+    grid.position.set(4.5, 0, 4.5);
+    scene.add(grid);
+
+    // Un solo draw call para todos los cubos: esta es una prueba de renderizado
+    // instanciado, no una simulación completa de chunks o del motor final.
+    const cubeMesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.96, 0.96, 0.96),
+      new THREE.MeshLambertMaterial(),
+      MAX_CUBES
+    );
+    cubeMesh.count = 0;
+    cubeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(cubeMesh);
+    const transform = new THREE.Object3D();
+    let cubeCount = 0;
+
+    function updateButtons() {
+      countLabel.textContent = String(cubeCount);
+      addOneButton.disabled = cubeCount >= MAX_CUBES;
+      addAllButton.disabled = cubeCount >= MAX_CUBES;
+    }
+
+    function addCube() {
+      if (cubeCount >= MAX_CUBES) return;
+      const index = cubeCount;
+      const x = index % 10;
+      const z = Math.floor(index / 10);
+      transform.position.set(x, 0.5, z);
+      transform.updateMatrix();
+      cubeMesh.setMatrixAt(index, transform.matrix);
+      cubeMesh.setColorAt(index, new THREE.Color().setHSL(0.31 + (index % 7) * 0.012, 0.42, 0.42 + (index % 3) * 0.035));
+      cubeCount++;
+      cubeMesh.count = cubeCount;
+      cubeMesh.instanceMatrix.needsUpdate = true;
+      if (cubeMesh.instanceColor) cubeMesh.instanceColor.needsUpdate = true;
+      updateButtons();
+      if (cubeCount === MAX_CUBES) message.textContent = '¡100 cubos! Observa el promedio de FPS durante unos segundos.';
+    }
+
+    addOneButton.addEventListener('click', addCube);
+    addAllButton.addEventListener('click', () => {
+      while (cubeCount < MAX_CUBES) addCube();
+      message.textContent = '¡100 cubos! Observa el promedio de FPS durante unos segundos.';
+    });
+    document.querySelector('#reset').addEventListener('click', () => {
+      cubeCount = 0;
+      cubeMesh.count = 0;
+      updateButtons();
+      message.textContent = 'Mundo reiniciado. Arrastra para girar; usa la rueda para acercar.';
+    });
+
+    let frames = 0;
+    let sampleStart = performance.now();
+    let fiveSecondStart = sampleStart;
+    let fiveSecondFrames = 0;
+    function animate(now) {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+      frames++;
+      fiveSecondFrames++;
+      const sampleElapsed = now - sampleStart;
+      if (sampleElapsed >= 500) {
+        fpsLabel.textContent = String(Math.round(frames * 1000 / sampleElapsed));
+        frames = 0;
+        sampleStart = now;
+      }
+      if (now - fiveSecondStart >= 5000) {
+        const elapsed = now - fiveSecondStart;
+        averageLabel.textContent = String(Math.round(fiveSecondFrames * 1000 / elapsed));
+        fiveSecondFrames = 0;
+        fiveSecondStart = now;
+      }
+    }
+    requestAnimationFrame(animate);
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
