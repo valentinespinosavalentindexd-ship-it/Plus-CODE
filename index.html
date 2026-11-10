@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Plus Code — prueba de cubos</title>
+  <title>Plus Code — prueba de 5000 cubos</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     * { box-sizing: border-box; }
     body { margin: 0; overflow: hidden; background: #101820; color: #f3f6f8; }
     #scene { position: fixed; inset: 0; }
     .panel {
-      position: fixed; z-index: 1; top: 16px; left: 16px; width: min(360px, calc(100vw - 32px));
+      position: fixed; z-index: 1; top: 16px; left: 16px; width: min(390px, calc(100vw - 32px));
       padding: 16px; border: 1px solid #ffffff24; border-radius: 12px;
-      background: #111a22eF; box-shadow: 0 8px 30px #0006;
+      background: #111a22ef; box-shadow: 0 8px 30px #0006;
     }
     h1 { margin: 0 0 6px; font-size: 1.15rem; }
     p { margin: 6px 0 12px; color: #c5d0d8; font-size: .88rem; line-height: 1.4; }
@@ -31,10 +31,10 @@
   </script>
 </head>
 <body>
-  <div id="scene" aria-label="Vista 3D del mundo de cubos"></div>
+  <div id="scene" aria-label="Vista 3D de cubos animados"></div>
   <section class="panel">
-    <h1>Plus Code — prueba visual</h1>
-    <p>Prototipo inicial: coloca hasta 100 cubos y observa los FPS en este navegador. Esto todavía no mide el rendimiento de un lenguaje Plus Code.</p>
+    <h1>Plus Code — prueba de 5000 cubos</h1>
+    <p>Prueba visual en el navegador: hasta 5000 cubos se mueven. Los FPS dependen del equipo, navegador y resolución; esto aún no mide el rendimiento de un lenguaje Plus Code.</p>
     <div class="stats">
       <div class="stat"><strong id="cube-count">0</strong><span>cubos</span></div>
       <div class="stat"><strong id="fps">—</strong><span>FPS actuales</span></div>
@@ -42,64 +42,67 @@
     </div>
     <div class="buttons">
       <button id="add-one">Poner un cubo</button>
-      <button id="add-100" class="secondary">Poner 100</button>
+      <button id="add-all" class="secondary">Poner 5000</button>
       <button id="reset" class="secondary">Reiniciar</button>
     </div>
-    <p id="message" role="status">Arrastra para girar; usa la rueda para acercar.</p>
+    <p id="message" role="status">Arrastra para girar; usa la rueda para acercar o alejar.</p>
   </section>
-  <div class="hint">Los resultados dependen del equipo, navegador y resolución.</div>
+  <div class="hint">Los cubos se animan; compara el promedio tras unos segundos.</div>
 
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    const MAX_CUBES = 100;
+    const MAX_CUBES = 5000;
+    const COLUMNS = 50;
+    const SPACING = 1.05;
     const host = document.querySelector('#scene');
     const countLabel = document.querySelector('#cube-count');
     const fpsLabel = document.querySelector('#fps');
     const averageLabel = document.querySelector('#average-fps');
     const message = document.querySelector('#message');
     const addOneButton = document.querySelector('#add-one');
-    const addAllButton = document.querySelector('#add-100');
+    const addAllButton = document.querySelector('#add-all');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#a9c8d8');
-    scene.fog = new THREE.Fog('#a9c8d8', 24, 55);
+    scene.fog = new THREE.Fog('#a9c8d8', 100, 230);
 
-    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
-    camera.position.set(13, 12, 16);
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
+    camera.position.set(95, 85, 115);
 
-    // Desactivar antialiasing y limitar el pixel ratio ayuda a que la prueba sea
-    // razonable en equipos modestos; no implica que el resultado sea universal.
+    // Sin antialiasing y con pixel ratio limitado para reducir el coste gráfico.
     const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     renderer.setSize(innerWidth, innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.appendChild(renderer.domElement);
 
+    const targetX = (COLUMNS - 1) * SPACING / 2;
+    const targetZ = (MAX_CUBES / COLUMNS - 1) * SPACING / 2;
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(4.5, 0, 4.5);
+    controls.target.set(targetX, 0, targetZ);
     controls.enableDamping = true;
     controls.update();
 
     scene.add(new THREE.HemisphereLight(0xe4f5ff, 0x586348, 2));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(8, 15, 6);
+    sun.position.set(40, 100, 25);
     scene.add(sun);
 
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(30, 30),
+      new THREE.PlaneGeometry(90, 130),
       new THREE.MeshLambertMaterial({ color: '#536c46' })
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.03;
+    ground.position.set(targetX, -0.03, targetZ);
     scene.add(ground);
-    const grid = new THREE.GridHelper(20, 20, '#526573', '#71808a');
-    grid.position.set(4.5, 0, 4.5);
+    const grid = new THREE.GridHelper(100, 100, '#526573', '#71808a');
+    grid.position.set(targetX, 0, targetZ);
     scene.add(grid);
 
-    // Un solo draw call para todos los cubos: esta es una prueba de renderizado
-    // instanciado, no una simulación completa de chunks o del motor final.
+    // Una sola malla instanciada reduce los draw calls. La animación actualiza
+    // la transformación de cada instancia cada fotograma para probar movimiento.
     const cubeMesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(0.96, 0.96, 0.96),
       new THREE.MeshLambertMaterial(),
@@ -108,8 +111,11 @@
     cubeMesh.count = 0;
     cubeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(cubeMesh);
+
     const transform = new THREE.Object3D();
+    const phases = new Float32Array(MAX_CUBES);
     let cubeCount = 0;
+    let elapsedSeconds = 0;
 
     function updateButtons() {
       countLabel.textContent = String(cubeCount);
@@ -117,31 +123,36 @@
       addAllButton.disabled = cubeCount >= MAX_CUBES;
     }
 
-    function addCube() {
-      if (cubeCount >= MAX_CUBES) return;
-      const index = cubeCount;
-      const x = index % 10;
-      const z = Math.floor(index / 10);
+    function createCube(index) {
+      const x = (index % COLUMNS) * SPACING;
+      const z = Math.floor(index / COLUMNS) * SPACING;
+      phases[index] = index * 0.173;
       transform.position.set(x, 0.5, z);
       transform.updateMatrix();
       cubeMesh.setMatrixAt(index, transform.matrix);
       cubeMesh.setColorAt(index, new THREE.Color().setHSL(0.31 + (index % 7) * 0.012, 0.42, 0.42 + (index % 3) * 0.035));
-      cubeCount++;
+    }
+
+    function addCubes(amount) {
+      const target = Math.min(MAX_CUBES, cubeCount + amount);
+      for (let index = cubeCount; index < target; index++) createCube(index);
+      cubeCount = target;
       cubeMesh.count = cubeCount;
       cubeMesh.instanceMatrix.needsUpdate = true;
       if (cubeMesh.instanceColor) cubeMesh.instanceColor.needsUpdate = true;
       updateButtons();
-      if (cubeCount === MAX_CUBES) message.textContent = '¡100 cubos! Observa el promedio de FPS durante unos segundos.';
+      message.textContent = cubeCount === MAX_CUBES
+        ? '¡5000 cubos moviéndose! Espera unos segundos para leer el promedio.'
+        : `${cubeCount} cubo(s). Puedes añadir más o pulsar “Poner 5000”.`;
     }
 
-    addOneButton.addEventListener('click', addCube);
-    addAllButton.addEventListener('click', () => {
-      while (cubeCount < MAX_CUBES) addCube();
-      message.textContent = '¡100 cubos! Observa el promedio de FPS durante unos segundos.';
-    });
+    addOneButton.addEventListener('click', () => addCubes(1));
+    addAllButton.addEventListener('click', () => addCubes(MAX_CUBES));
     document.querySelector('#reset').addEventListener('click', () => {
       cubeCount = 0;
       cubeMesh.count = 0;
+      cubeMesh.instanceMatrix.needsUpdate = true;
+      if (cubeMesh.instanceColor) cubeMesh.instanceColor.needsUpdate = true;
       updateButtons();
       message.textContent = 'Mundo reiniciado. Arrastra para girar; usa la rueda para acercar.';
     });
@@ -150,8 +161,24 @@
     let sampleStart = performance.now();
     let fiveSecondStart = sampleStart;
     let fiveSecondFrames = 0;
+    let previousFrame = sampleStart;
     function animate(now) {
       requestAnimationFrame(animate);
+      const deltaSeconds = Math.min((now - previousFrame) / 1000, 0.05);
+      previousFrame = now;
+      elapsedSeconds += deltaSeconds;
+
+      // Movimiento vertical individual, como una prueba sencilla de trabajo por cubo.
+      for (let index = 0; index < cubeCount; index++) {
+        const x = (index % COLUMNS) * SPACING;
+        const z = Math.floor(index / COLUMNS) * SPACING;
+        const y = 0.5 + Math.sin(elapsedSeconds * 2.2 + phases[index]) * 0.22;
+        transform.position.set(x, y, z);
+        transform.updateMatrix();
+        cubeMesh.setMatrixAt(index, transform.matrix);
+      }
+      if (cubeCount > 0) cubeMesh.instanceMatrix.needsUpdate = true;
+
       controls.update();
       renderer.render(scene, camera);
       frames++;
